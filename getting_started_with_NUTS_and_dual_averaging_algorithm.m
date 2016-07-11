@@ -30,7 +30,10 @@ theta0 = randn(d, 1);
 %  substantially from one model to another. For models with simple
 %  posterior distributions (e.g. logistic regression), 50 iterations may
 %  well be more than enough. But more complex posterior distributions may 
-%  require a few hundreds or more iterations.
+%  require a few hundreds or more iterations. See the Stan manual for
+%  useful tricks (pre-prossessing of parameters) to accelerate the mixing 
+%  of NUTS in general (and hence in particular reduce the number of
+%  iterations needed for tuning.
 
 seed = 1;
 rng(seed)
