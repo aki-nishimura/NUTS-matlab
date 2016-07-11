@@ -29,8 +29,8 @@ theta0 = randn(d, 1);
 %  The number of iterations needed to find a good step-size varies
 %  substantially from one model to another. For models with simple
 %  posterior distributions (e.g. logistic regression), 50 iterations may
-%  well be enough. But more complex posterior distributions may require 
-%  a few hundreds or (potentially much) more iterations.
+%  well be more than enough. But more complex posterior distributions may 
+%  require a few hundreds or more iterations.
 
 seed = 1;
 rng(seed)
