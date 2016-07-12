@@ -7,7 +7,7 @@ The code here is suitable for research purposes as it provides access to the inn
 The code for the main functions 'NUTS' and 'dualAveraging' is mostly based on the implementation by Hoffman. 
 
 ## Plans for Additional Features
-Let me know if you find this project helpful and and would like to request the additional features such as:
+Let me know if you find this project helpful and would like to request the additional features such as:
 - non-identity mass matrix: the current implementation of 'NUTS' uses a fixed identity mass matrix.
 
 ## License
