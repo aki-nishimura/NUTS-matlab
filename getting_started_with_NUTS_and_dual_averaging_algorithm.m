@@ -81,8 +81,8 @@ title('Traceplot of $\log(\pi(\theta))$', 'Interpreter', 'LaTex')
 %% Compute effective sample sizes (ESS) for each parameter. 
 % The estimator used here is one of the most reliable and provide estimates
 % that are generally in the right ballpark (as long as the length of a
-% chain is much longer, relative to its auto-correlation). Bear in mind,
-% though, that estimators of ESS are inherently somewhat noisy.
+% chain is much longer than the lag it takes for the auto-correlation to
+% become negligible).
 
 set(0,'defaultAxesFontSize', 18) 
 marker_size = 6;
@@ -97,5 +97,3 @@ xlabel('Parameters')
 ylabel('ESS')
 title('Effective sample sizes')
 hold off
-
-
