@@ -76,22 +76,22 @@ logp = logp0;
 % Initially the only valid point is the initial point.
 n = 1;
 
-% Main loop---keep going until the criterion s == 0.
-s = 1;
-while (s == 1)
+% Main loop---keep going until the stop criterion is met.
+nostop = true;
+while nostop
     % Choose a direction. -1=backwards, 1=forwards.
     dir = 2 * (rand() < 0.5) - 1;
     % Double the size of the tree.
     if (dir == -1)
-        [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime, gradprime, logpprime, nprime, sprime, alpha, nalpha] = ...
+        [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime, gradprime, logpprime, nprime, nostopprime, alpha, nalpha] = ...
             build_tree(thetaminus, rminus, gradminus, logu, dir, depth, epsilon, f, joint);
     else
-        [~, ~, ~, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, sprime, alpha, nalpha] = ...
+        [~, ~, ~, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, nostopprime, alpha, nalpha] = ...
             build_tree(thetaplus, rplus, gradplus, logu, dir, depth, epsilon, f, joint);
     end
     % Use Metropolis-Hastings to decide whether or not to move to a
     % point from the half-tree we just generated.
-    if ((sprime == 1) && (rand() < nprime/n))
+    if (nostopprime && (rand() < nprime/n))
         theta = thetaprime;
         logp = logpprime;
         grad = gradprime;
@@ -99,7 +99,7 @@ while (s == 1)
     % Update number of valid points we've seen.
     n = n + nprime;
     % Decide if it's time to stop.
-    s = sprime && stop_criterion(thetaminus, thetaplus, rminus, rplus);
+    nostop = nostopprime && stop_criterion(thetaminus, thetaplus, rminus, rplus);
     % Increment depth.
     depth = depth + 1;
 
@@ -131,7 +131,7 @@ criterion = (thetavec' * rminus >= 0) && (thetavec' * rplus >= 0);
 end
 
 % The main recursion.
-function [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, sprime, alphaprime, nalphaprime] = ...
+function [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, nostopprime, alphaprime, nalphaprime] = ...
                 build_tree(theta, r, grad, logu, dir, depth, epsilon, f, joint0)
             
 if (depth == 0)
@@ -141,7 +141,7 @@ if (depth == 0)
     % Is the new point in the slice?
     nprime = logu < joint;
     % Is the simulation wildly inaccurate?
-    sprime = logu - 100 < joint;
+    nostopprime = logu - 100 < joint;
     % Set the return values---minus=plus for all things here, since the
     % "tree" is of depth 0.
     thetaminus = thetaprime;
@@ -160,16 +160,16 @@ if (depth == 0)
     nalphaprime = 1;
 else
     % Recursion: Implicitly build the height depth-1 left and right subtrees.
-    [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, sprime, alphaprime, nalphaprime] = ...
+    [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, nostopprime, alphaprime, nalphaprime] = ...
                 build_tree(theta, r, grad, logu, dir, depth-1, epsilon, f, joint0);
     % No need to keep going if the stopping criteria were met in the first
     % subtree.
-    if (sprime == 1)
+    if (nostopprime == 1)
         if (dir == -1)
-            [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime2, gradprime2, logpprime2, nprime2, sprime2, alphaprime2, nalphaprime2] = ...
+            [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime2, gradprime2, logpprime2, nprime2, nostopprime2, alphaprime2, nalphaprime2] = ...
                 build_tree(thetaminus, rminus, gradminus, logu, dir, depth-1, epsilon, f, joint0);
         else
-            [~, ~, ~, thetaplus, rplus, gradplus, thetaprime2, gradprime2, logpprime2, nprime2, sprime2, alphaprime2, nalphaprime2] = ...
+            [~, ~, ~, thetaplus, rplus, gradplus, thetaprime2, gradprime2, logpprime2, nprime2, nostopprime2, alphaprime2, nalphaprime2] = ...
                 build_tree(thetaplus, rplus, gradplus, logu, dir, depth-1, epsilon, f, joint0);
         end
         % Choose which subtree to propagate a sample up from.
@@ -181,7 +181,7 @@ else
         % Update the number of valid points.
         nprime = nprime + nprime2;
         % Update the stopping criterion.
-        sprime = sprime && sprime2 && stop_criterion(thetaminus, thetaplus, rminus, rplus);
+        nostopprime = nostopprime && nostopprime2 && stop_criterion(thetaminus, thetaplus, rminus, rplus);
         % Update the acceptance probability statistics.
         alphaprime = alphaprime + alphaprime2;
         nalphaprime = nalphaprime + nalphaprime2;
