@@ -68,7 +68,7 @@ rplus = r0;
 gradminus = grad0;
 gradplus = grad0;
 % Initial height j = 0.
-j = 0;
+depth = 0;
 % If all else fails, the next sample is the previous sample.
 theta = theta0;
 grad = grad0;
@@ -80,14 +80,14 @@ n = 1;
 s = 1;
 while (s == 1)
     % Choose a direction. -1=backwards, 1=forwards.
-    v = 2 * (rand() < 0.5) - 1;
+    dir = 2 * (rand() < 0.5) - 1;
     % Double the size of the tree.
-    if (v == -1)
+    if (dir == -1)
         [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime, gradprime, logpprime, nprime, sprime, alpha, nalpha] = ...
-            build_tree(thetaminus, rminus, gradminus, logu, v, j, epsilon, f, joint);
+            build_tree(thetaminus, rminus, gradminus, logu, dir, depth, epsilon, f, joint);
     else
         [~, ~, ~, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, sprime, alpha, nalpha] = ...
-            build_tree(thetaplus, rplus, gradplus, logu, v, j, epsilon, f, joint);
+            build_tree(thetaplus, rplus, gradplus, logu, dir, depth, epsilon, f, joint);
     end
     % Use Metropolis-Hastings to decide whether or not to move to a
     % point from the half-tree we just generated.
@@ -101,9 +101,9 @@ while (s == 1)
     % Decide if it's time to stop.
     s = sprime && stop_criterion(thetaminus, thetaplus, rminus, rplus);
     % Increment depth.
-    j = j + 1;
+    depth = depth + 1;
 
-    if j > max_tree_depth
+    if depth > max_tree_depth
         disp('The current NUTS iteration reached the maximum tree depth.')
         break
     end
@@ -132,11 +132,11 @@ end
 
 % The main recursion.
 function [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, sprime, alphaprime, nalphaprime] = ...
-                build_tree(theta, r, grad, logu, v, j, epsilon, f, joint0)
+                build_tree(theta, r, grad, logu, dir, depth, epsilon, f, joint0)
             
-if (j == 0)
+if (depth == 0)
     % Base case: Take a single leapfrog step in the direction v.
-    [thetaprime, rprime, gradprime, logpprime] = leapfrog(theta, r, grad, v*epsilon, f);
+    [thetaprime, rprime, gradprime, logpprime] = leapfrog(theta, r, grad, dir*epsilon, f);
     joint = logpprime - 0.5 * (rprime' * rprime);
     % Is the new point in the slice?
     nprime = logu < joint;
@@ -159,18 +159,18 @@ if (j == 0)
     end
     nalphaprime = 1;
 else
-    % Recursion: Implicitly build the height j-1 left and right subtrees.
+    % Recursion: Implicitly build the height depth-1 left and right subtrees.
     [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, sprime, alphaprime, nalphaprime] = ...
-                build_tree(theta, r, grad, logu, v, j-1, epsilon, f, joint0);
+                build_tree(theta, r, grad, logu, dir, depth-1, epsilon, f, joint0);
     % No need to keep going if the stopping criteria were met in the first
     % subtree.
     if (sprime == 1)
-        if (v == -1)
+        if (dir == -1)
             [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime2, gradprime2, logpprime2, nprime2, sprime2, alphaprime2, nalphaprime2] = ...
-                build_tree(thetaminus, rminus, gradminus, logu, v, j-1, epsilon, f, joint0);
+                build_tree(thetaminus, rminus, gradminus, logu, dir, depth-1, epsilon, f, joint0);
         else
             [~, ~, ~, thetaplus, rplus, gradplus, thetaprime2, gradprime2, logpprime2, nprime2, sprime2, alphaprime2, nalphaprime2] = ...
-                build_tree(thetaplus, rplus, gradplus, logu, v, j-1, epsilon, f, joint0);
+                build_tree(thetaplus, rplus, gradplus, logu, dir, depth-1, epsilon, f, joint0);
         end
         % Choose which subtree to propagate a sample up from.
         if (rand() < nprime2 / (nprime + nprime2))
