@@ -67,7 +67,7 @@ rminus = r0;
 rplus = r0;
 gradminus = grad0;
 gradplus = grad0;
-% Initial height j = 0.
+% Initial height dir = 0.
 depth = 0;
 % If all else fails, the next sample is the previous sample.
 theta = theta0;
