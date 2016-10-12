@@ -1,7 +1,11 @@
-function [theta, alpha_ave, nfevals, logp, grad] = NUTS(f, epsilon, theta0, logp0, grad0, max_tree_depth)
-% function [theta, grad, logp, nfevals, alpha_ave] = NUTS(f, epsilon, theta0, max_tree_depth, logp0, grad0)
+function [theta, re_theta, alpha_ave, nfevals, logp, grad] = ...
+    ReNUTS(f, epsilon, theta0, nrecycle, logp0, grad0, max_tree_depth)
+% function [theta, grad, logp, nfevals, alpha_ave] = ...
+%     ReNUTS(f, epsilon, theta0, n_recycle, logp0, grad0, max_tree_depth)
 %
-% Carries out one iteration of No-U-Turn-Sampler.
+% Carries out one iteration of Recycled No-U-Turn-Sampler.
+
+% TODO: Update the documentation to reflect the recycling steps.
 %
 % Args:
 % f - function handle: returns the log probability of the target and 
@@ -35,6 +39,10 @@ function [theta, alpha_ave, nfevals, logp, grad] = NUTS(f, epsilon, theta0, logp
 % Copyright (c) 2011, Matthew D. Hoffman
 % All rights reserved.
 % 
+% Copyright (c) 2016, Akihiko Nishimrura, for the portions of the code 
+% relating to the recycling algorithm of Nishimura and Dunson (2015).
+% All rights reserved.
+% 
 % Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 % 
 % Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
@@ -44,12 +52,16 @@ function [theta, alpha_ave, nfevals, logp, grad] = NUTS(f, epsilon, theta0, logp
 global nfevals;
 nfevals = 0;
 
-if nargin < 5
+if nargin < 4
+    nrecycle = 0;
+end
+
+if nargin < 6
     [logp0, grad0] = f(theta0);
     nfevals = nfevals + 1;
 end
 
-if nargin < 6
+if nargin < 7
     max_tree_depth = 10;
 end
 
@@ -75,7 +87,8 @@ grad = grad0;
 logp = logp0;
 % Initially the only valid point is the initial point.
 n = 1;
-
+% Recyclable samples.
+re_theta = theta;
 % Main loop---keep going until the stop criterion is met.
 stop = false;
 while ~stop
@@ -83,10 +96,10 @@ while ~stop
     dir = 2 * (rand() < 0.5) - 1;
     % Double the size of the tree.
     if (dir == -1)
-        [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime, gradprime, logpprime, nprime, stopprime, alpha, nalpha] = ...
+        [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alpha, nalpha] = ...
             build_tree(thetaminus, rminus, gradminus, logu, dir, depth, epsilon, f, joint);
     else
-        [~, ~, ~, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, alpha, nalpha] = ...
+        [~, ~, ~, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alpha, nalpha] = ...
             build_tree(thetaplus, rplus, gradplus, logu, dir, depth, epsilon, f, joint);
     end
     % Use Metropolis-Hastings to decide whether or not to move to a
@@ -96,6 +109,8 @@ while ~stop
         logp = logpprime;
         grad = gradprime;
     end
+    % Keep all the recyclable states that have been generated so far.
+    re_theta = [re_theta, re_thetaprime]; 
     % Update number of valid points we've seen.
     n = n + nprime;
     % Decide if it's time to stop.
@@ -109,6 +124,14 @@ while ~stop
     end
 end
 alpha_ave = alpha / nalpha;
+
+% Sample uniformly from all the generated recyclable states.
+if size(re_theta, 2) >= nrecycle
+    re_theta = re_theta(:, randperm(size(re_theta, 2), nrecycle));
+else
+    re_theta = re_theta(:, randi([1, size(re_theta, 2)], 1, nrecycle));
+end
+theta = [re_theta, theta];
 
 end
 
@@ -131,7 +154,7 @@ criterion = (thetavec' * rminus < 0) || (thetavec' * rplus < 0);
 end
 
 % The main recursion.
-function [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, alphaprime, nalphaprime] = ...
+function [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alphaprime, nalphaprime] = ...
                 build_tree(theta, r, grad, logu, dir, depth, epsilon, f, joint0)
             
 if (depth == 0)
@@ -140,6 +163,11 @@ if (depth == 0)
     joint = logpprime - 0.5 * (rprime' * rprime);
     % Is the new point in the slice?
     nprime = logu < joint;
+    if nprime
+        re_thetaprime = thetaprime;
+    else
+        re_thetaprime = [];
+    end
     % Is the simulation wildly inaccurate?
     stopprime = logu - 100 >= joint;
     % Set the return values---minus=plus for all things here, since the
@@ -160,16 +188,20 @@ if (depth == 0)
     nalphaprime = 1;
 else
     % Recursion: Implicitly build the height depth-1 left and right subtrees.
-    [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, alphaprime, nalphaprime] = ...
+    [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alphaprime, nalphaprime] = ...
                 build_tree(theta, r, grad, logu, dir, depth-1, epsilon, f, joint0);
+    % No sample can be recycled if the stopping criteria were met.
+    if stopprime
+        re_thetaprime = [];
+    end
     % No need to keep going if the stopping criteria were met in the first
     % subtree.
     if ~stopprime
         if (dir == -1)
-            [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime2, gradprime2, logpprime2, nprime2, stopprime2, alphaprime2, nalphaprime2] = ...
+            [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime2, gradprime2, logpprime2, nprime2, stopprime2, re_thetaprime2, alphaprime2, nalphaprime2] = ...
                 build_tree(thetaminus, rminus, gradminus, logu, dir, depth-1, epsilon, f, joint0);
         else
-            [~, ~, ~, thetaplus, rplus, gradplus, thetaprime2, gradprime2, logpprime2, nprime2, stopprime2, alphaprime2, nalphaprime2] = ...
+            [~, ~, ~, thetaplus, rplus, gradplus, thetaprime2, gradprime2, logpprime2, nprime2, stopprime2, re_thetaprime2, alphaprime2, nalphaprime2] = ...
                 build_tree(thetaplus, rplus, gradplus, logu, dir, depth-1, epsilon, f, joint0);
         end
         % Choose which subtree to propagate a sample up from.
@@ -182,6 +214,12 @@ else
         nprime = nprime + nprime2;
         % Update the stopping criterion.
         stopprime = stopprime || stopprime2 || stop_criterion(thetaminus, thetaplus, rminus, rplus);
+        % Combine the recyclable samples.
+        if stopprime
+            re_thetaprime = [];
+        else
+            re_thetaprime = [re_thetaprime, re_thetaprime2];
+        end
         % Update the acceptance probability statistics.
         alphaprime = alphaprime + alphaprime2;
         nalphaprime = nalphaprime + nalphaprime2;
