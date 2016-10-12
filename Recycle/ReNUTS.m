@@ -94,13 +94,16 @@ stop = false;
 while ~stop
     % Choose a direction. -1=backwards, 1=forwards.
     dir = 2 * (rand() < 0.5) - 1;
+    % Tell 'build_tree' function to store no more states than those that 
+    % might be used as an output in the end. Just to save some memory.
+    nsampleprime = ceil(nsample * 2^depth / (n + 2^depth));
     % Double the size of the tree.
     if (dir == -1)
         [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alpha, nalpha] = ...
-            build_tree(thetaminus, rminus, gradminus, logu, dir, depth, epsilon, f, joint, nsample);
+            build_tree(thetaminus, rminus, gradminus, logu, dir, depth, epsilon, f, joint, nsampleprime);
     else
         [~, ~, ~, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alpha, nalpha] = ...
-            build_tree(thetaplus, rplus, gradplus, logu, dir, depth, epsilon, f, joint, nsample);
+            build_tree(thetaplus, rplus, gradplus, logu, dir, depth, epsilon, f, joint, nsampleprime);
     end
     % Use Metropolis-Hastings to decide whether or not to move to a
     % point from the half-tree we just generated.
@@ -135,10 +138,10 @@ end
 alpha_ave = alpha / nalpha;
 
 % Duplicate recyclable samples if not enough of them were generated.
-if size(re_theta, 2) >= nsample
-    re_theta = re_theta(:, randperm(size(re_theta, 2), nsample));
-else
-    re_theta = re_theta(:, randi([1, size(re_theta, 2)], 1, nsample));
+if size(re_theta, 2) < nsample
+    nrep = floor(nsample / size(re_theta, 2));
+    re_theta_extra = re_theta(:, randperm(size(re_theta, 2), nsample - n * nrep));
+    re_theta = [repmat(re_theta, 1, nrep), re_theta_extra];
 end
 
 end
@@ -163,7 +166,7 @@ end
 
 % The main recursion.
 function [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alphaprime, nalphaprime] = ...
-                build_tree(theta, r, grad, logu, dir, depth, epsilon, f, joint0, nsample)
+                build_tree(theta, r, grad, logu, dir, depth, epsilon, f, joint0, nsampleprime)
             
 if (depth == 0)
     % Base case: Take a single leapfrog step in the direction 'dir'.
@@ -197,7 +200,7 @@ if (depth == 0)
 else
     % Recursion: Implicitly build the height depth-1 left and right subtrees.
     [thetaminus, rminus, gradminus, thetaplus, rplus, gradplus, thetaprime, gradprime, logpprime, nprime, stopprime, re_thetaprime, alphaprime, nalphaprime] = ...
-                build_tree(theta, r, grad, logu, dir, depth-1, epsilon, f, joint0, nsample);
+                build_tree(theta, r, grad, logu, dir, depth-1, epsilon, f, joint0, nsampleprime);
     % No need to keep going if the stopping criteria were met in the first
     % subtree, and no sample can be recycled if the stopping criteria were 
     % met.
@@ -205,12 +208,13 @@ else
         re_thetaprime = [];
         nprime = 0;
     else
+        nsampleprime2 = ceil(nsampleprime * 2^(depth - 1) / (nprime + 2^(depth - 1))); % The maximum number of states we would potentially recycle from the subtree.
         if (dir == -1)
             [thetaminus, rminus, gradminus, ~, ~, ~, thetaprime2, gradprime2, logpprime2, nprime2, stopprime2, re_thetaprime2, alphaprime2, nalphaprime2] = ...
-                build_tree(thetaminus, rminus, gradminus, logu, dir, depth-1, epsilon, f, joint0, nsample);
+                build_tree(thetaminus, rminus, gradminus, logu, dir, depth-1, epsilon, f, joint0, nsampleprime2);
         else
             [~, ~, ~, thetaplus, rplus, gradplus, thetaprime2, gradprime2, logpprime2, nprime2, stopprime2, re_thetaprime2, alphaprime2, nalphaprime2] = ...
-                build_tree(thetaplus, rplus, gradplus, logu, dir, depth-1, epsilon, f, joint0, nsample);
+                build_tree(thetaplus, rplus, gradplus, logu, dir, depth-1, epsilon, f, joint0, nsampleprime2);
         end
         % Choose which subtree to propagate a sample up from.
         if (rand() < nprime2 / (nprime + nprime2))
@@ -225,14 +229,14 @@ else
             re_thetaprime = [];
             nprime = 0;
         else
-            if nprime + nprime2 <= nsample
+            if nprime + nprime2 <= nsampleprime
                 re_thetaprime = [re_thetaprime, re_thetaprime2];
             else
                 % No need to keep more recyclable states than the number of samples we
                 % are going to return.
-                mprime = nsample * nprime / (nprime + nprime2);
+                mprime = nsampleprime * nprime / (nprime + nprime2);
                 mprime = floor(mprime) + ((mprime - floor(mprime)) > rand());
-                mprime2 = nsample - mprime;
+                mprime2 = nsampleprime - mprime;
                 re_thetaprime = [ ...
                     re_thetaprime(:, randperm(size(re_thetaprime, 2), mprime)), ...
                     re_thetaprime2(:, randperm(size(re_thetaprime2, 2), mprime2))];
